@@ -47,6 +47,7 @@ def prepareData(testCSV):
         imsave(line[1],img1)
 
 #prepareData(LABEL_PATH)
+#prepareData("vehicle_img.csv")
 
 def getTrainingData(labelList, batchSize, trainSize, IsValidate=False):
     '''
@@ -91,7 +92,7 @@ def getTrainingData(labelList, batchSize, trainSize, IsValidate=False):
     return IMG1, IMG2, labelset, [imgH, imgW, imgC, outputshape]
 
 
-def create_variables(name, shape, initializer=tf.contrib.layers.xavier_initializer(), is_fc_layer=False):
+def create_variables(name, shape, initializer=tf.contrib.layers.xavier_initializer(), is_fc_layer=False,is_train=True):
     '''
     :param name: A string. The name of the new variable
     :param shape: A list of dimensions
@@ -105,12 +106,12 @@ def create_variables(name, shape, initializer=tf.contrib.layers.xavier_initializ
     else:
         regularizer = tf.contrib.layers.l2_regularizer(scale=0.0)
 
-    new_variables = tf.get_variable(name, shape=shape, initializer=initializer, regularizer=regularizer)
+    new_variables = tf.get_variable(name, shape=shape, initializer=initializer, regularizer=regularizer, trainable=is_train)
 
     return new_variables
 
 
-def batch_normalization_layer(input_layer, dimension, m):
+def batch_normalization_layer(input_layer, dimension, m, is_train=True):
     '''
     Helper function to do batch normalization
     :param input_layer: 4D tensor
@@ -119,13 +120,13 @@ def batch_normalization_layer(input_layer, dimension, m):
     '''
 
     mean, variance = tf.nn.moments(input_layer, axes=[0, 1, 2])
-    beta = tf.get_variable('beta%d' % m, dimension, tf.float32, initializer=tf.constant_initializer(0.0, tf.float32))
-    gamma = tf.get_variable('gamma%d' % m, dimension, tf.float32, initializer=tf.constant_initializer(1.0, tf.float32))
+    beta = tf.get_variable('beta%d' % m, dimension, tf.float32, initializer=tf.constant_initializer(0.0, tf.float32), trainable=is_train)
+    gamma = tf.get_variable('gamma%d' % m, dimension, tf.float32, initializer=tf.constant_initializer(1.0, tf.float32), trainable=is_train)
     bn_layer = tf.nn.batch_normalization(input_layer, mean, variance, beta, gamma, 0.001)
     return bn_layer
 
 
-def conv_bn_relu_layer(input_layer, filter_shape, stride, m):
+def conv_bn_relu_layer(input_layer, filter_shape, stride, m, is_train=True):
     '''
     A helper function to conv, batch normalize and relu the input tensor sequentially
     :param input_layer: 4D tensor
@@ -135,17 +136,17 @@ def conv_bn_relu_layer(input_layer, filter_shape, stride, m):
     '''
 
     out_channel = filter_shape[-1]
-    filter = create_variables(name='conv', shape=filter_shape)
+    filter = create_variables(name='conv', shape=filter_shape, is_train=is_train)
 
     conv_layer = tf.nn.conv2d(input_layer, filter, strides=[1, stride, stride, 1], padding='SAME')
-    bn_layer = batch_normalization_layer(conv_layer, out_channel, m)
+    bn_layer = batch_normalization_layer(conv_layer, out_channel, m, is_train=is_train)
 
     output = tf.nn.relu(bn_layer)
 
     return output
 
 
-def bn_relu_conv_layer(input_layer, filter_shape, stride, m):
+def bn_relu_conv_layer(input_layer, filter_shape, stride, m, is_train=True):
     '''
     A helper function to batch normalize, relu and conv the input layer sequentially
     :param input_layer: 4D tensor
@@ -156,15 +157,15 @@ def bn_relu_conv_layer(input_layer, filter_shape, stride, m):
 
     in_channel = input_layer.get_shape().as_list()[-1]
 
-    bn_layer = batch_normalization_layer(input_layer, in_channel, m)
+    bn_layer = batch_normalization_layer(input_layer, in_channel, m, is_train=is_train)
     relu_layer = tf.nn.relu(bn_layer)
 
-    filter = create_variables(name='conv', shape=filter_shape)
+    filter = create_variables(name='conv', shape=filter_shape, is_train=is_train)
     conv_layer = tf.nn.conv2d(relu_layer, filter, strides=[1, stride, stride, 1], padding='SAME')
     return conv_layer
 
 
-def residual_block(input_layer, output_channel, first_block=False, m=1):
+def residual_block(input_layer, output_channel, first_block=False, m=1, is_train=True):
     '''
     Defines a residual block in ResNet
     :param input_layer: 4D tensor
@@ -187,13 +188,13 @@ def residual_block(input_layer, output_channel, first_block=False, m=1):
     # The first conv layer of the first residual block does not need to be normalize and relu-ed.
     with tf.variable_scope('%d_conv1_in_block' % m):
         if first_block:
-            filter = create_variables(name='conv', shape=[3, 3, input_channel, output_channel])
+            filter = create_variables(name='conv', shape=[3, 3, input_channel, output_channel], is_train=is_train)
             conv1 = tf.nn.conv2d(input_layer, filter=filter, strides=[1, 1, 1, 1], padding='SAME')
         else:
             conv1 = bn_relu_conv_layer(input_layer, [3, 3, input_channel, output_channel], stride, m=m)
 
     with tf.variable_scope('%d_conv2_in_block' % m):
-        conv2 = bn_relu_conv_layer(conv1, [3, 3, output_channel, output_channel], 1, m=m)
+        conv2 = bn_relu_conv_layer(conv1, [3, 3, output_channel, output_channel], 1, m=m, is_train=is_train)
 
     # When the channel of input layer and conv2 does not match
     # depth of input layers
@@ -209,7 +210,7 @@ def residual_block(input_layer, output_channel, first_block=False, m=1):
     return output
 
 
-def output_layer(input_layer, num_labels, m):
+def output_layer(input_layer, num_labels, m, is_train=True):
     '''
     :param input_layer: 2D tensor
     :param num_lagbels = int. How many output labels in total? (10 for cifar 10)
@@ -218,14 +219,14 @@ def output_layer(input_layer, num_labels, m):
 
     input_dim = input_layer.get_shape().as_list()[-1]
     fc_w = create_variables(name='fc_weights_%d' % m, shape=[input_dim, num_labels], is_fc_layer=True,
-                            initializer=tf.uniform_unit_scaling_initializer(factor=1.0))
-    fc_b = create_variables(name='fc_biase_%d' % m, shape=[num_labels], initializer=tf.zeros_initializer())
+                            initializer=tf.uniform_unit_scaling_initializer(factor=1.0), is_train=is_train)
+    fc_b = create_variables(name='fc_biase_%d' % m, shape=[num_labels], initializer=tf.zeros_initializer(), is_train=is_train)
     # fc_h = tf.nn.relu(tf.matmul(input_layer,fc_w)+fc_b)
     fc_h = (tf.matmul(input_layer, fc_w) + fc_b)
     return fc_h
 
 
-def resNet(input_tensor_batch, n, reuse, m=1):
+def resNet(input_tensor_batch, n, reuse, m=1, is_train=True):
     '''
     The main function that defines the ResNet. total layers = 1 + 2n + 2n + 2n + 1 = 6n + 2
     :param input_tensor_batch: 4D tensor
@@ -238,42 +239,42 @@ def resNet(input_tensor_batch, n, reuse, m=1):
 
     layers = []
     with tf.variable_scope('%dconv0' % m, reuse=reuse):
-        conv0 = conv_bn_relu_layer(input_tensor_batch, [4, 4, 3, 16], 1, m=m)
+        conv0 = conv_bn_relu_layer(input_tensor_batch, [4, 4, 3, 16], 1, m=m, is_train=is_train)
         layers.append(conv0)
 
     for i in range(n):
         with tf.variable_scope('%dconv1_%d' % (m, i), reuse=reuse):
             if i == 0:
-                conv1 = residual_block(layers[-1], 16, first_block=True, m=m)
+                conv1 = residual_block(layers[-1], 16, first_block=True, m=m, is_train=is_train)
             else:
-                conv1 = residual_block(layers[-1], 16, m=m)
+                conv1 = residual_block(layers[-1], 16, m=m, is_train=is_train)
             layers.append(conv1)
 
     for i in range(n):
         with tf.variable_scope('%dconv2_%d' % (m, i), reuse=reuse):
-            conv2 = residual_block(layers[-1], 32)
+            conv2 = residual_block(layers[-1], 32, is_train=is_train)
             layers.append(conv2)
 
     for i in range(n):
         with tf.variable_scope('%dconv3_%d' % (m, i), reuse=reuse):
-            conv3 = residual_block(layers[-1], 64)
+            conv3 = residual_block(layers[-1], 64, is_train=is_train)
             layers.append(conv3)
 
     with tf.variable_scope('fc', reuse=reuse):
         in_channel = layers[-1].get_shape().as_list()[-1]
-        bn_layer = batch_normalization_layer(layers[-1], in_channel, m)
+        bn_layer = batch_normalization_layer(layers[-1], in_channel, m, is_train=is_train)
         relu_layer = tf.nn.relu(bn_layer)
         global_pool = tf.reduce_mean(relu_layer, [1, 2])
 
         assert global_pool.get_shape().as_list()[-1:] == [64]
-        output = output_layer(global_pool, 1, m=m)
+        output = output_layer(global_pool, 1, m=m, is_train=is_train)
         layers.append(output)
 
     return layers[-1]
 
 
 
-def evaluator(batchSize, shape):
+def evaluator(batchSize, shape, is_train=True):
     '''
     evaluator model
     :param batchSize: batch size

@@ -23,7 +23,7 @@ readyTrainingData(LABEL_PATH, labelList)
 IMG1, IMG2, labelset, shape = getTrainingData(batchSize=batchSize, labelList=labelList,trainSize=len(labelList))
 
 # evaluator model
-I1, I2, Y, flatten, fc3, cost = evaluator(batchSize, shape)
+I1, I2, Y, flatten, fc3, cost = evaluator(batchSize, shape, is_train=IS_TRAIN)
 optimizer = (tf.train.AdagradOptimizer(learning_rate=learning_rate, use_locking=False, name='optimizer')).minimize(cost)
 
 # ready to train
@@ -35,7 +35,7 @@ sess = tf.InteractiveSession()
 if IS_TRAIN == True:
     sess.run(init)
     saver.restore(sess, EVAL_MODEL_PATH)
-    step = 3101
+    step = 57400
 else:
     saver.restore(sess, EVAL_MODEL_PATH)
     print sess
