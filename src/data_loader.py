@@ -33,7 +33,8 @@ def get_loader(root, batch_size, scale_size, data_format, split=None, is_graysca
 
 
 
-    filename_queue = tf.train.string_input_producer(list(paths), shuffle=False, seed=seed)
+    #filename_queue = tf.train.string_input_producer(list(paths), shuffle=False, seed=seed)
+    filename_queue = tf.train.string_input_producer(list(paths))
     reader = tf.WholeFileReader()
     filename, data = reader.read(filename_queue)
     image = tf_decode(data, channels=3)
@@ -43,7 +44,7 @@ def get_loader(root, batch_size, scale_size, data_format, split=None, is_graysca
         image = tf.image.rgb_to_grayscale(image)
     image.set_shape(shape)
 
-    min_after_dequeue = 4000
+    min_after_dequeue = 5000
     capacity = min_after_dequeue + 3 * batch_size
 
 
@@ -51,6 +52,7 @@ def get_loader(root, batch_size, scale_size, data_format, split=None, is_graysca
         [image], batch_size=batch_size,
         num_threads=4, capacity=capacity,
         min_after_dequeue=min_after_dequeue, name='synthetic_inputs')
+
 
     if dataset_name in ['CelebA']:
         queue = tf.image.crop_to_bounding_box(queue, 50, 25, 128, 128)

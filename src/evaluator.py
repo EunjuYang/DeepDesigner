@@ -46,7 +46,7 @@ def prepareData(testCSV):
         imsave(line[0],img0)
         imsave(line[1],img1)
 
-#prepareData(LABEL_PATH)
+prepareData("deep_designer_objective.csv")
 #prepareData("vehicle_img.csv")
 
 def getTrainingData(labelList, batchSize, trainSize, IsValidate=False):

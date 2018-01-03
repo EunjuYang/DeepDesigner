@@ -6,6 +6,7 @@ revised by EJYang
 lasg update 2017/12/31
 '''
 from __future__ import print_function
+from data_loader import *
 
 import os
 try:
@@ -172,6 +173,7 @@ class Trainer(object):
                 #cur_measure = np.mean(measure_history)
                 #if cur_measure > prev_measure * 0.99:
                 #prev_measure = cur_measure
+
 
     def build_model(self):
         self.x = self.data_loader
